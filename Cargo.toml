@@ -8,7 +8,7 @@ documentation = "https://docs.rs/threading"
 homepage      = "https://github.com/mcorce/threading"
 repository    = "https://github.com/mcorce/threading"
 readme        = "README.md"
-keywords      = ["thread", "thread pool", "threadpool", "thread_pool", "pool"]
+keywords      = ["thread", "threadpool", "thread_pool", "pool"]
 exclude       = [
   ".gitignore",
   ".travis.yml",
