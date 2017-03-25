@@ -29,6 +29,7 @@ struct Inner {
     active: AtomicUsize,
     waiting: AtomicUsize,
     min_num: usize,
+    max_num: usize,
 }
 
 struct Count<'a> {
@@ -53,38 +54,41 @@ impl<'a> Drop for Count<'a> {
 
 impl Pool {
     pub fn new() -> Pool {
-        let cpu_num = num_cpus::get();
+        let min_num = num_cpus::get();
+        let max_num = min_num * 16;
 
         let pool = Pool {
             inner: Arc::new(Inner {
-                queue: Mutex::new(VecDeque::new()),
+                queue: Mutex::new(VecDeque::with_capacity(max_num * 16)),
                 condvar: Condvar::new(),
                 active: AtomicUsize::new(0),
                 waiting: AtomicUsize::new(0),
-                min_num: cpu_num,
+                min_num: min_num,
+                max_num: max_num,
             }),
         };
 
-        for _ in 0..cpu_num {
-            pool.thread(None);
+        for _ in 0..min_num {
+            pool.thread();
         }
 
         pool
     }
 
-    pub fn with_capacity(n: usize) -> Pool {
+    pub fn with_capacity(min: usize, max: usize) -> Pool {
         let pool = Pool {
             inner: Arc::new(Inner {
-                queue: Mutex::new(VecDeque::new()),
+                queue: Mutex::new(VecDeque::with_capacity(max)),
                 condvar: Condvar::new(),
                 active: AtomicUsize::new(0),
                 waiting: AtomicUsize::new(0),
-                min_num: n,
+                min_num: min,
+                max_num: max,
             })
         };
 
-        for _ in 0..n {
-            pool.thread(None);
+        for _ in 0..min {
+            pool.thread();
         }
 
         pool
@@ -95,24 +99,21 @@ impl Pool {
     {
         let mut queue = self.inner.queue.lock().unwrap();
 
-        if self.inner.waiting.load(Ordering::Acquire) == 0 {
-            self.thread(Some(Box::new(handle)));
-        } else {
-            queue.push_back(Box::new(handle));
-            self.inner.condvar.notify_one();
+        if self.inner.waiting.load(Ordering::Acquire) == 0 && self.inner.active.load(Ordering::Acquire) < self.inner.max_num + 1 {
+            self.thread();
         }
+            
+        queue.push_back(Box::new(handle));
+        self.inner.condvar.notify_one();
+
     }
 
-    fn thread(&self, handle: Option<Truck<'static>>) {
+    fn thread(&self) {
         let inner = self.inner.clone();
 
         thread::spawn(move || {
-            let inner = inner;
-            let _active = Count::add(&inner.active);
 
-            if let Some(h) = handle {
-                h.call_box();
-            }
+            let _active = Count::add(&inner.active);
 
             loop {
                 let handle = {
@@ -131,7 +132,7 @@ impl Pool {
                         if inner.active.load(Ordering::Acquire) <= inner.min_num {
                             queue = inner.condvar.wait(queue).unwrap();
                         } else {
-                            let (q, wait) = inner.condvar.wait_timeout(queue, Duration::from_secs(30)).unwrap();
+                            let (q, wait) = inner.condvar.wait_timeout(queue, Duration::from_secs(60)).unwrap();
                             queue = q;
 
                             if wait.timed_out() && queue.is_empty() && inner.active.load(Ordering::Acquire) > inner.min_num {
@@ -158,14 +159,12 @@ impl Drop for Pool {
 
 #[test]
 fn test() {
-    let thread_pool = Pool::new();
+    let thread_pool = Pool::with_capacity(2, 8);
 
-    for _ in 0..100 {
-    
-        let mut a: Vec<i32> = Vec::new();
+    for i in 0..100 {
 
         thread_pool.spawn(move || {
-            a.push(123);
+            i * i;
         });
 
     }

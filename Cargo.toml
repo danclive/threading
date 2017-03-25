@@ -1,6 +1,6 @@
 [package]
 name    = "threading"
-version = "0.1.0"
+version = "0.1.1"
 license = "MIT"
 authors = ["dangcheng <dangcheng@hotmail.com>"]
 description = "Thread pool for Rust"
