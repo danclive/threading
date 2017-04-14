@@ -97,15 +97,14 @@ impl Pool {
     pub fn spawn<F>(&self, handle: F)
         where F: FnOnce() + Send + 'static
     {
-        let mut queue = self.inner.queue.lock().unwrap();
-
         if self.inner.waiting.load(Ordering::Acquire) == 0 && self.inner.active.load(Ordering::Acquire) < self.inner.max_num + 1 {
             self.thread();
         }
+
+        let mut queue = self.inner.queue.lock().unwrap();
             
         queue.push_back(Box::new(handle));
         self.inner.condvar.notify_one();
-
     }
 
     fn thread(&self) {
