@@ -18,7 +18,6 @@ impl<F: FnOnce()> FnBox for F {
 
 type Truck<'a> = Box<FnBox + Send + 'a>;
 
-#[derive(Clone)]
 pub struct Pool {
     inner: Arc<Inner>,
 }
